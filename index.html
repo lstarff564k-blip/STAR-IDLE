@@ -47,7 +47,7 @@ body.dk #hc{flex-direction:row;justify-content:center;flex-wrap:wrap}
 <div id="ov"><div id="ovc"><h1 id="ot">STAR IDLE</h1><p id="os">Drag to move. Your knight attacks on its own. Open the star menu to grow stronger.</p><p id="pk">CHOOSE YOUR KNIGHT</p><div id="hc"></div></div></div></div></div></div>
 <button id="mb"><img id="mi"><span id="bd"></span></button>
 <button id="sg">SETTINGS</button>
-<div id="sp"><h1>SETTINGS</h1><p id="sm"></p><button id="dm"></button><p id="sh"></p><button id="sc">CLOSE</button></div>
+<div id="sp"><h1>SETTINGS</h1><p id="sm"></p><button id="dm"></button><p id="sh"></p><button id="ck">CHANGE KNIGHT (NEW RUN)</button><button id="sc">CLOSE</button></div>
 <div id="pn"><h1>STAR IDLE</h1>
 <div class="r"><b id="lv"></b><span id="wv"></span></div><div class="bar"><i id="xp"></i></div>
 <div class="r"><span id="co"></span><span id="hs"></span></div><p id="cs" style="margin:2px 0 6px;opacity:.7"></p>
@@ -69,24 +69,24 @@ let S={coins:0,luck:0,stars:[0,0,0,0,0,0,0,0,0,0],up:[0,0,0,0,0,0,0,0,0,0],garde
 try{Object.assign(S,JSON.parse(localStorage.getItem("si1")))}catch(e){}fixS();
 const sv=()=>{S.t=Date.now();try{localStorage.setItem("si1",JSON.stringify(S))}catch(e){}push()};
 /* ---- cloud save: when the viewer is signed in, progress is also kept in their private account data; newest save wins ---- */
-let cloud=null,cdone=0,cb=0,cw=0,lj="";
-const sig=()=>JSON.stringify([S.coins,S.luck,S.stars,S.up,S.garden,S.best]);
-function push(){if(!cloud)return;clearTimeout(cb);cb=setTimeout(flush,4000)}
+let cloud=null,cdone=0,cb=0,cw=0,lj="",inited=0,started=0;
+const sig=()=>JSON.stringify([S.coins,S.luck,S.stars,S.up,S.garden,S.best,S.hero,S.run]);
+function push(){if(!cloud||cb)return;cb=setTimeout(()=>{cb=0;flush()},15000)}
 async function flush(){if(!cloud)return;if(cw){push();return}const j=sig();if(j==lj)return;cw=1;
-try{await cloud.set({coins:S.coins,luck:S.luck,stars:S.stars,up:S.up,garden:S.garden,best:S.best,t:S.t||Date.now()});lj=j}
+try{await cloud.set({coins:S.coins,luck:S.luck,stars:S.stars,up:S.up,garden:S.garden,best:S.best,hero:Number.isInteger(S.hero)?S.hero:-1,run:S.run||null,t:S.t||Date.now()});lj=j}
 catch(e){if(e&&(e.code=="invalid_argument"||e.code=="revoked"||e.code=="not_granted")){cloud=null;$("cs").textContent="SAVED ON THIS DEVICE"}}
 cw=0}
-function adopt(d){S.coins=d.coins|0;S.luck=d.luck|0;S.stars=d.stars;S.up=d.up;S.garden=d.garden;fixS();S.best=d.best|0;S.t=d.t||0;lj=sig();
+function adopt(d){S.coins=d.coins|0;S.luck=d.luck|0;S.stars=d.stars;S.up=d.up;S.garden=d.garden;fixS();S.best=d.best|0;S.t=d.t||0;if(Number.isInteger(d.hero)&&d.hero>=0&&d.hero<3)S.hero=d.hero;S.run=d.run&&typeof d.run=="object"?d.run:null;lj=sig();
 try{localStorage.setItem("si1",JSON.stringify(S))}catch(e){}
 gi=[];S.garden.forEach(t=>{const[x,y]=slot(gi.length);gi.push({t,x,y})});calc();ui()}
-function cfin(){if(cdone)return;cdone=1;$("pk").textContent="CHOOSE YOUR KNIGHT";$("cs").textContent=cloud?"CLOUD SAVE ON":"SAVED ON THIS DEVICE"}
-async function cinit(){if(!window.claude||!claude.use){cfin();return}
+function cfin(){if(cdone)return;cdone=1;$("pk").textContent="CHOOSE YOUR KNIGHT";$("cs").textContent=cloud?"CLOUD SAVE ON":"SAVED ON THIS DEVICE";tryStart()}
+async function cinit(){if(S.hero>=0&&S.hero<3)$("hc").style.visibility="hidden";if(!window.claude||!claude.use){cfin();return}
 $("pk").textContent="LOADING SAVE";setTimeout(cfin,3500);
 try{const[u,d]=await Promise.all([claude.use("user"),claude.use("db")]);if(cdone||!u||!d)return cfin();const id=await u.id();if(cdone||!id)return cfin();
 const ref=d.doc("data/users/"+id+"/save"),sn=await ref.get();if(cdone)return;const c=sn.exists?sn.data():null;cloud=ref;
 if(c&&(c.t||0)>(S.t||0))adopt(c);else if(S.coins||S.luck||S.best||S.garden.length||S.stars.some(n=>n>0))push()}catch(e){cloud=null}
 cfin()}
-document.addEventListener("visibilitychange",()=>{if(document.hidden&&cloud){clearTimeout(cb);flush()}});
+const leave=()=>{saveRun();if(cloud){clearTimeout(cb);cb=0;flush()}};document.addEventListener("visibilitychange",()=>{if(document.hidden)leave()});addEventListener("pagehide",leave);
 const cv=$("cv"),c=cv.getContext("2d"),gd=$("gd"),gx=gd.getContext("2d");c.imageSmoothingEnabled=gx.imageSmoothingEnabled=false;c.scale(2,2);
 function grass(w,h){const k=document.createElement("canvas");k.width=w;k.height=h;const x=k.getContext("2d");x.fillStyle="#3f8a3d";x.fillRect(0,0,w,h);for(let i=0;i<w*h/40;i++){x.fillStyle=["#4a9a46","#357a35","#e84a8a","#fff3a0"][i%11?i%2:2+i%2];x.fillRect(R()*w|0,R()*h|0,1,i%11?2:1)}return k}
 let BG=grass(144,240);const GB=grass(120,80);
@@ -168,7 +168,7 @@ function orbs(){const g=G,s=S.stars;if(!s[6])return;const n=Math.min(8,1+s[6]+(S
 for(let i=0;i<n;i++){const an=g.oa+i*6.283/n,x=g.x+Math.cos(an)*r0,y=g.y+2+Math.sin(an)*r0;
 c.fillStyle="#8a1020";rc(x-3,y-2,7,5);rc(x-2,y-3,5,7);c.fillStyle="#ff7a2e";rc(x-2,y-1,5,3);rc(x-1,y-2,3,5);c.fillStyle="#ffd92e";rc(x-1,y-1,3,3);c.fillStyle="#fffbd0";rc(x,y,1,1)}}
 function shield(){const g=G;if(!g.sh)return;c.save();c.globalAlpha=.55+.2*Math.sin(performance.now()/160);c.strokeStyle="#dfe6f2";c.lineWidth=1.5;c.beginPath();c.arc(g.x,g.y+5,15,0,6.3);c.stroke();c.globalAlpha=.12;c.fillStyle="#dfe6f2";c.fill();c.restore()}
-function step(dt){const g=G,s=S.stars;g.t+=dt;g.wave=1+(g.t/20|0);
+function step(dt){const g=G,s=S.stars;g.t+=dt;g.wave=1+(g.t/20|0);if((g.sv=(g.sv||0)-dt)<=0){g.sv=3;saveRun()}
 let dx=(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0)+jx,dy=(keys.s||keys.arrowdown?1:0)-(keys.w||keys.arrowup?1:0)+jy;const l=Math.hypot(dx,dy);if(l>1){dx/=l;dy/=l}
 const ms=44*P.spd*dt*(hero==1&&g.at?.45:1);g.x=cl(g.x+dx*ms,10,VW-10);g.y=cl(g.y+dy*ms,14,VH-14);g.hp=Math.min(g.mhp,g.hp+P.reg*dt);g.hit-=dt;
 const tg=near();let fx=dx,fy=dy;if(tg){fx=tg.x-g.x;fy=tg.y-g.y}if(fx||fy)g.face=fy>0&&fy>Math.abs(fx)*1.2?1:fx<0?0:2;
@@ -192,7 +192,7 @@ for(const e of g.ens){if(e.dead)continue;e.sl-=dt;e.fl-=dt;if(e.st>0)e.st-=dt;if
 if(g.hit<=0&&Math.hypot(e.x-g.x,e.y-g.y)<e.r+4){if(g.sh)pop();else g.hp-=e.d;g.hit=.5}}
 g.fx.forEach(f=>{f.l-=dt;if(f.r!=null)f.r=f.mr*(1-f.l/f.m)});g.fx=g.fx.filter(f=>f.l>0);
 g.bl=g.bl.filter(b=>b.l>0&&b.x>-5&&b.x<VW+6&&b.y>-5&&b.y<VH+5);g.ens=g.ens.filter(e=>!e.dead);g.sj=g.sj.filter(s=>s.l>0&&s.x>-25&&s.x<VW+26&&s.y>-25&&s.y<VH+25);g.sk=Math.max(0,g.sk-dt);
-if(g.hp<=0){S.best=Math.max(S.best,g.wave);sv();over=1;showOv("GAME OVER","You reached wave "+g.wave+" at level "+g.lv+".")}}
+if(g.hp<=0){S.best=Math.max(S.best,g.wave);S.run=null;sv();over=1;showOv("GAME OVER","You reached wave "+g.wave+" at level "+g.lv+".")}}
 const rc=(x,y,w,h)=>c.fillRect(Math.round(x),Math.round(y),Math.max(1,Math.round(w)),Math.max(1,Math.round(h)));
 /* draw a sprite 1:1 in canvas pixels; (cx,cy) is a point in game units, (ax,ay) the matching pixel in the sprite */
 function blit(img,sx,sy,sw,sh,cx,cy,ax,ay,flip){const X=Math.round(cx*2),Y=Math.round(cy*2);ax=Math.round(ax);ay=Math.round(ay);c.save();c.setTransform(1,0,0,1,0,0);
@@ -223,7 +223,14 @@ function ui(){const g=G,k=cost(),n=gi.length;$("lv").textContent="LEVEL "+g.lv;$
 $("lk").textContent="BUY LUCK LV"+(S.luck+1)+" $"+k;$("lk").disabled=S.coins<k;$("ca").disabled=!n;
 $("sl").innerHTML=ST.map((s,t)=>{const u=S.up[t],mx=u>=10,uc=upc(t);return `<div class="sr"><img src="${du(t)}"><div>${s[0]} x${S.stars[t]} LV${u}<br>${s[4]}${S.stars[t]>0?`<br><button class="up" data-t="${t}" ${mx||S.coins<uc?"disabled":""}>${mx?"MAX LEVEL":"UPGRADE $"+uc}</button>`:""}</div></div>`}).join("");$("bd").textContent=n;$("bd").style.display=n?"block":"none"}
 function showOv(t,s){$("ot").textContent=t;$("os").textContent=s;$("ov").style.display="flex";ovOn=1}
-function pick(h){if(!cdone)return;hero=h;reset();over=0;ovOn=0;$("ov").style.display="none"}
+/* the knight and the run in progress are saved, so coming back skips the pick screen and carries on */
+function saveRun(){const g=G;if(!g||ovOn||over)return;S.hero=hero;
+S.run={t:g.t,hp:g.hp,mhp:g.mhp,lv:g.lv,xp:g.xp,kills:g.kills,nb:g.nb,x:g.x/VW,y:g.y/VH,b:g.boss?{ty:g.boss.ty,hp:g.boss.hp,mh:g.boss.mh,sp:g.boss.sp,d:g.boss.d}:null};sv()}
+function applyRun(r){const g=G;g.t=+r.t||0;g.mhp=+r.mhp||100;g.hp=cl(+r.hp||g.mhp,1,g.mhp);g.lv=+r.lv||1;g.xp=+r.xp||0;g.kills=+r.kills||0;g.nb=+r.nb||1;g.wave=1+(g.t/20|0);
+g.x=cl((r.x??.5)*VW,10,VW-10);g.y=cl((r.y??.5)*VH,14,VH-14);g.hit=1;
+if(r.b&&EB[r.b.ty]){const q=EB[r.b.ty];g.boss={x:VW/2,y:q.lh/2+10,ty:r.b.ty,hp:+r.b.hp,mh:+r.b.mh,sp:+r.b.sp,d:+r.b.d,q,r:q.r,sl:0,fl:0,rt:0,ph:0,b:1};g.ens.push(g.boss)}}
+function pick(h,run){if(!cdone)return;hero=h;S.hero=h;reset();if(run)applyRun(run);over=0;ovOn=0;$("ov").style.display="none";saveRun()}
+function tryStart(){if(started||!cdone||!inited)return;started=1;$("hc").style.visibility="";if(S.hero>=0&&S.hero<3)pick(S.hero,S.run)}
 let VW=144,VH=240,mode="phone";
 function fit(){const w=$("wrap"),s=Math.min(w.clientWidth/VW,w.clientHeight/VH),b=$("box");b.style.width=VW*s+"px";b.style.height=VH*s+"px"}
 /* phone = tall 144x240 world, desktop = wide 320x180 world; a run in progress is rescaled, not lost */
@@ -238,7 +245,7 @@ fit();try{localStorage.setItem("si1m",m)}catch(e){}}
 function closeM(){menu=0;$("pn").classList.remove("on");$("sp").classList.remove("on")}
 function loop(n){const dt=Math.min(.05,(n-lt)/1e3);lt=n;fr++;gt+=dt;if(gt>=10){gt-=10;drop()}
 if(!menu&&!ovOn)step(dt);draw();if(menu)drawG(n/1e3);if(fr%6==0)hud();requestAnimationFrame(loop)}
-$("mb").onclick=()=>{menu=1;ui();$("sp").classList.remove("on");$("pn").classList.add("on")};$("cl").onclick=closeM;$("sc").onclick=closeM;
+$("mb").onclick=()=>{menu=1;ui();$("sp").classList.remove("on");$("pn").classList.add("on")};$("cl").onclick=closeM;$("sc").onclick=closeM;$("ck").onclick=()=>{closeM();showOv("CHOOSE KNIGHT","Your next run starts with the knight you pick.")};
 $("sg").onclick=()=>{menu=1;$("pn").classList.remove("on");$("sp").classList.add("on")};$("dm").onclick=()=>setMode(mode=="desktop"?"phone":"desktop");
 $("lk").onclick=()=>{const k=cost();if(S.coins>=k){S.coins-=k;S.luck++;sv();ui()}};
 $("ca").onclick=()=>{gi.forEach(s=>S.stars[s.t]++);gi=[];S.garden=[];calc();sv();ui()};
@@ -254,7 +261,7 @@ const sz=a=>({x:a[0],y:a[1],w:a[2],h:a[3],lw:a[2]/2,lh:a[3]/2,r:.3*(a[2]+a[3])/4
 const icon=h=>{const p=KJ.p[h+"00"],k=document.createElement("canvas");k.width=p[2];k.height=p[3];k.getContext("2d").drawImage(KA,p[0],p[1],p[2],p[3],0,0,p[2],p[3]);return k.toDataURL()};
 function init(){EW=tint("#fff");EI=tint("#5cc8ff");for(let i=0;i<EN.length;i++){ES[i]=sz(EJ[i+"0"]);EB[i]=sz(EJ[i+"1"])}
 $("hc").innerHTML=HERO.map((h,i)=>`<button class="hero" data-h="${i}" style="background:${h.c}"><span class="ic"><img src="${icon(i)}" alt=""></span><span><b>${h.n}</b><br>USES ${h.u}<br>${h.s}</span></button>`).join("");
-document.querySelectorAll(".hero").forEach(b=>b.onclick=()=>pick(+b.dataset.h));requestAnimationFrame(loop)}
+document.querySelectorAll(".hero").forEach(b=>b.onclick=()=>pick(+b.dataset.h));inited=1;tryStart();requestAnimationFrame(loop)}
 $("mi").src=du(0);reset();calc();S.garden.forEach(t=>{const[x,y]=slot(gi.length);gi.push({t,x,y})});let sm="phone";try{sm=localStorage.getItem("si1m")=="desktop"?"desktop":"phone"}catch(e){}setMode(sm);ui();
 let nl=0;KA.onload=EA.onload=()=>{if(++nl==2)init()};
 cinit();
